@@ -38,7 +38,8 @@ def main(argv):
         password=config['password'],
         headless_browser=True,
         show_logs=not silent,
-        multi_logs=True
+        multi_logs=True,
+        disable_image_load=True,
     )
 
     try:
