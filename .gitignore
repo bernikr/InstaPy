@@ -107,3 +107,7 @@ logs/
 # pytest
 .pytest_cache/
 tests/logs
+.Rhistory
+instapy-sync.ffs_gui
+sync.ffs_db
+config.json
