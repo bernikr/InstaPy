@@ -107,7 +107,14 @@ logs/
 # pytest
 .pytest_cache/
 tests/logs
+
+# R
 .Rhistory
-instapy-sync.ffs_gui
-sync.ffs_db
+
+# sync
+*.ffs_db
+*.sync.ffs_lock
+*.ffs_gui
+
+#config
 config.json
