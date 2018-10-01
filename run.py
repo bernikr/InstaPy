@@ -87,10 +87,8 @@ def main(argv):
             interact=True,
         )
 
-        session.set_dont_unfollow_active_users(enabled=True, posts=5)
         session.unfollow_users(
             amount=100,
-            #nonFollowers=True,
             allFollowing=True,
             unfollow_after=3*24*60*60,
             sleep_delay=655,
