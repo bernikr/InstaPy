@@ -75,7 +75,7 @@ def main(argv):
 
         # update the follower graph
         try:
-            subprocess.call("./plot_followers.R", stderr=subprocess.DEVNULL)
+            subprocess.call(["./plot_followers.R", session.username], stderr=subprocess.DEVNULL)
         except Exception as e:
             print('warning: graph not updated')
             print(e)

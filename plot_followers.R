@@ -2,7 +2,10 @@
 require(ggplot2)
 require(lubridate)
 
-folder='/var/www/html/followers/'
+folder   <- '/var/www/html/followers/'
+
+args     <- commandArgs(trailingOnly=TRUE)
+username <- args[1]
 
 readData <- function(path, colname){
   data <- read.csv(path, header=FALSE, sep=" ", col.names=c('date','time', colname))
@@ -12,8 +15,8 @@ readData <- function(path, colname){
 }
 
 #read and format the data
-followerData <- readData("./logs/***REMOVED***/followerNum.txt", 'Followers')
-followingData <- readData("./logs/***REMOVED***/followingNum.txt", 'Following')
+followerData  <- readData(paste("./logs/", username ,"/followerNum.txt", sep=''), 'Followers')
+followingData <- readData(paste("./logs/", username ,"/followingNum.txt", sep=''), 'Following')
 
 created_time = format(max(followerData$Date))
 
