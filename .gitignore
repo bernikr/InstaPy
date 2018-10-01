@@ -113,6 +113,7 @@ tests/logs
 
 # sync
 *.ffs_db
+*.ffs_lock
 *.sync.ffs_lock
 *.ffs_gui
 
