@@ -4,6 +4,7 @@ import time
 from math import ceil
 import random
 import re
+from sys import platform
 from platform import python_version
 import os
 import csv
@@ -91,7 +92,7 @@ class InstaPy:
                  proxy_port=None,
                  disable_image_load=False,
                  bypass_suspicious_attempt=False,
-                 multi_logs=False):
+                 multi_logs=True):
 
         if nogui:
             self.display = Display(visible=0, size=(800, 600))
@@ -162,6 +163,7 @@ class InstaPy:
         self.user_interact_media = None
         self.user_interact_percentage = 0
         self.user_interact_random = False
+        self.dont_follow_inap_post = True
 
         self.use_clarifai = False
         self.clarifai_api_key = None
@@ -186,6 +188,7 @@ class InstaPy:
         self.commenting_approved = True
         self.max_comments = 35
         self.min_comments = 0
+        self.comments_mandatory_words = []
 
         self.relationship_data = {username:{"all_following":[], "all_followers":[]}}
 
@@ -302,7 +305,7 @@ class InstaPy:
             # Proxy for chrome
             if self.proxy_address and self.proxy_port:
                 prox = Proxy()
-                proxy = ":".join([self.proxy_address, self.proxy_port])
+                proxy = ":".join([self.proxy_address, str(self.proxy_port)])
                 prox.proxy_type = ProxyType.MANUAL
                 prox.http_proxy = proxy
                 prox.socks_proxy = proxy
@@ -977,12 +980,15 @@ class InstaPy:
     def set_delimit_commenting(self,
                                 enabled=False,
                                  max=None,
-                                  min=None):
+                                  min=None,
+                                    comments_mandatory_words=[]):
 
         self.delimit_commenting = True if enabled==True else False
         self.max_comments = max
         self.min_comments = min
 
+        # comment only when the image description contain at least one of those words
+        self.comments_mandatory_words = comments_mandatory_words
 
 
     def set_simulation(self, enabled=True, percentage=100):
@@ -1128,6 +1134,7 @@ class InstaPy:
                                      disapproval_reason) = verify_commenting(self.browser,
                                                                              self.max_comments,
                                                                              self.min_comments,
+                                                                             self.comments_mandatory_words,
                                                                               self.logger)
                                 if self.commenting_approved:
                                     if temp_comments:
@@ -1323,6 +1330,7 @@ class InstaPy:
                                   disapproval_reason) = verify_commenting(self.browser,
                                                                            self.max_comments,
                                                                            self.min_comments,
+                                                                           self.comments_mandatory_words,
                                                                             self.logger)
                             if self.commenting_approved:
                                 if temp_comments:
@@ -1541,7 +1549,8 @@ class InstaPy:
                                      disapproval_reason) = verify_commenting(self.browser,
                                                                              self.max_comments,
                                                                              self.min_comments,
-                                                                              self.logger)
+                                                                             self.comments_mandatory_words,
+                                                                             self.logger)
                                 if self.commenting_approved:
                                     if temp_comments:
                                         # Use clarifai related comments only!
@@ -1913,6 +1922,35 @@ class InstaPy:
                     not_valid_users += 1
                     continue
 
+            # decision making
+            # static conditions
+            not_dont_include = username not in self.dont_include
+            follow_restricted = follow_restriction("read", username,
+                                                    self.follow_times, self.logger)
+            counter = 0
+            while True:
+                following = (random.randint(0, 100) <= self.follow_percentage and
+                             self.do_follow and
+                             not_dont_include and
+                             not follow_restricted)
+                commenting = (random.randint(0, 100) <= self.comment_percentage and
+                              self.do_comment and
+                              not_dont_include)
+                liking = (random.randint(0, 100) <= self.like_percentage)
+
+                counter += 1
+
+                # if we have only one image to like/comment
+                if commenting and not liking and amount == 1:
+                    continue
+                if following or commenting or liking:
+                    self.logger.info('username actions: following={} commenting={} liking={}'.format(following, commenting, liking))
+                    break
+                # if for some reason we have no actions on this user
+                if counter > 5:
+                    self.logger.info('username={} could not get interacted'.format(username))
+                    break
+
             try:
                 links = get_links_for_username(self.browser,
                                                username,
@@ -1958,35 +1996,12 @@ class InstaPy:
                                    self.logger))
 
                     if not inappropriate:
-                        following = (random.randint(0, 100) <= self.follow_percentage)
-                        liking = (random.randint(0, 100) <= self.like_percentage)
-                        commenting = (random.randint(0, 100) <= self.comment_percentage)
-
-                        # follow
-                        if (self.do_follow and
-                            username not in self.dont_include and
-                            following and
-                            not follow_restriction("read", username,
-                             self.follow_times, self.logger)):
-
-                            follow_state, msg = follow_user(
-                                                    self.browser,
-                                                    "post",
-                                                    self.username,
-                                                    username,
-                                                    None,
-                                                    self.blacklist,
-                                                    self.logger,
-                                                    self.logfolder)
-                            if follow_state == True:
-                                followed += 1
-
-                            elif msg == "already followed":
-                                already_followed += 1
-
-                        else:
-                            self.logger.info('--> Not following')
-                            sleep(1)
+                        # after first image we roll again
+                        if i > 0:
+                            liking = (random.randint(0, 100) <= self.like_percentage)
+                            commenting = (random.randint(0, 100) <= self.comment_percentage and
+                                            self.do_comment and
+                                                not_dont_include)
 
                         # like
                         if self.do_like and liking and self.delimit_liking:
@@ -2022,10 +2037,7 @@ class InstaPy:
                                         self.logger.error(
                                             'Image check error: {}'.format(err))
 
-                                if (self.do_comment and
-                                     user_name not in self.dont_include and
-                                      checked_img and
-                                       commenting):
+                                if commenting and checked_img:
 
                                     if self.delimit_commenting:
                                         (self.commenting_approved,
@@ -2033,6 +2045,7 @@ class InstaPy:
                                                                      self.browser,
                                                                       self.max_comments,
                                                                       self.min_comments,
+                                                                      self.comments_mandatory_words,
                                                                        self.logger)
                                     if self.commenting_approved:
                                         if temp_comments:
@@ -2077,6 +2090,28 @@ class InstaPy:
 
                 except NoSuchElementException as err:
                     self.logger.info('Invalid Page: {}'.format(err))
+
+            # follow
+            if following and not (self.dont_follow_inap_post and inap_img > 0):
+
+                follow_state, msg = follow_user(
+                    self.browser,
+                    "post",
+                    self.username,
+                    username,
+                    None,
+                    self.blacklist,
+                    self.logger,
+                    self.logfolder)
+                if follow_state == True:
+                    followed += 1
+
+                elif msg == "already followed":
+                    already_followed += 1
+
+            else:
+                self.logger.info('--> Not following')
+                sleep(1)
 
             if liked_img < amount:
                 self.logger.info('-------------')
@@ -2999,6 +3034,7 @@ class InstaPy:
                                              disapproval_reason) = verify_commenting(self.browser,
                                                                                      self.max_comments,
                                                                                      self.min_comments,
+                                                                                     self.comments_mandatory_words,
                                                                                       self.logger)
 
                                         if self.commenting_approved:
@@ -3568,6 +3604,7 @@ class InstaPy:
                                  disapproval_reason) = verify_commenting(self.browser,
                                                                          self.max_comments,
                                                                          self.min_comments,
+                                                                         self.comments_mandatory_words,
                                                                           self.logger)
                             if self.commenting_approved:
                                 if temp_comments:
@@ -3705,6 +3742,10 @@ class InstaPy:
             stochasticity = {"enabled":stochastic_flow,
                               "latesttime":latesttime,
                                "original_peaks":orig_peaks}
+
+            if (platform.startswith("win32") and
+                    python_version().startswith(('2', '3.7'))):
+                notify_me = False   # remove this block once plyer>1.3.0 is released to PyPI
 
             # update QS configuration with the fresh settings
             configuration.update({"state":enabled,

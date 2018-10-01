@@ -4,15 +4,18 @@ import datetime
 import re
 import signal
 import os
+from sys import exit as clean_exit
 from platform import system
 from subprocess import call
 import csv
 import sqlite3
 import json
 from contextlib import contextmanager
+import requests
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
+from tempfile import gettempdir
 
 from .time_util import sleep
 from .time_util import sleep_actual
@@ -33,12 +36,16 @@ def is_private_profile(browser, logger, following=True):
         is_private = browser.execute_script(
             "return window._sharedData.entry_data."
             "ProfilePage[0].graphql.user.is_private")
+
     except WebDriverException:
         try:
             browser.execute_script("location.reload()")
+            update_activity()
+
             is_private = browser.execute_script(
                 "return window._sharedData.entry_data."
                 "ProfilePage[0].graphql.user.is_private")
+
         except WebDriverException:
             return None
 
@@ -78,12 +85,16 @@ def validate_username(browser,
             username = browser.execute_script(
                     "return window._sharedData.entry_data."
                     "PostPage[0].graphql.shortcode_media.owner.username")
+
         except WebDriverException:
             try:
                 browser.execute_script("location.relaod()")
+                update_activity()
+
                 username = browser.execute_script(
                         "return window._sharedData.entry_data."
                         "PostPage[0].graphql.shortcode_media.owner.username")
+
             except WebDriverException:
                 logger.error("Username validation failed! ~cannot get the post owner's username")
                 return False, \
@@ -236,7 +247,7 @@ def add_user_to_blacklist(username, campaign, action, logger, logfolder):
                     'action': action
             })
     except Exception as err:
-        logger.error('blacklist dictWrite error {}'.format(err,))
+        logger.error('blacklist dictWrite error {}'.format(err))
 
     logger.info('--> {} added to blacklist for {} campaign (action: {})'
                 .format(username, campaign, action))
@@ -316,13 +327,13 @@ def get_active_users(browser, username, posts, boundary, logger):
                     logger.info("Failed to get likers count on your post {}".format(count))
                     likers_count = None
 
-            browser.find_element_by_xpath(
-                "//a[contains(@class, 'zV_Nj')]").click()
+            likes_button = browser.find_element_by_xpath(
+                                       "//a[contains(@class, 'zV_Nj')]")
+            click_element(browser, likes_button)
             sleep_actual(5)
 
-
             dialog = browser.find_element_by_xpath(
-                "//div[text()='Likes']/following-sibling::div")
+                                 "//div[text()='Likes']/following-sibling::div")
 
             scroll_it = True
             try_again = 0
@@ -337,17 +348,22 @@ def get_active_users(browser, username, posts, boundary, logger):
                         return false;}
                     ''', dialog)
 
+                if scroll_it == True:
+                    update_activity()
+
                 if sc_rolled > 91 or too_many_requests > 1:  # old value 100
                     logger.info("Too Many Requests sent! ~will sleep some :>")
                     sleep_actual(600)
                     sc_rolled = 0
                     too_many_requests = 0 if too_many_requests >= 1 else too_many_requests
+
                 else:
                     sleep_actual(1.2)  # old value 5.6
                     sc_rolled += 1
 
                 tmp_list = browser.find_elements_by_xpath(
                     "//a[contains(@class, 'FPmhX')]")
+
                 if boundary is not None:
                     if len(tmp_list) >= boundary:
                         break
@@ -355,12 +371,14 @@ def get_active_users(browser, username, posts, boundary, logger):
                 if (scroll_it == False and
                       likers_count and
                         likers_count - 1 > len(tmp_list)):
+
                     if ((boundary is not None and likers_count - 1 > boundary) or
                                 boundary is None):
+
                         if try_again <= 1:  # you can increase the amount of tries here
-                            logger.info(
-                                "Cor! ~failed to get the desired amount of usernames, trying again!  |  post:{}  |  attempt: {}".format(
-                                    posts, try_again + 1))
+                            logger.info("Cor! ~failed to get the desired amount of usernames, "
+                                            "trying again!  |  post:{}  |  attempt: {}".format(
+                                                                                posts, try_again + 1))
                             try_again += 1
                             too_many_requests += 1
                             scroll_it = True
@@ -369,14 +387,18 @@ def get_active_users(browser, username, posts, boundary, logger):
 
             tmp_list = browser.find_elements_by_xpath(
                 "//a[contains(@class, 'FPmhX')]")
-            logger.info("Post {}  |  Likers: found {}, catched {}".format(count, likers_count, len(tmp_list)))
+
+            logger.info("Post {}  |  Likers: found {}, catched {}".format(
+                                            count, likers_count, len(tmp_list)))
 
         except NoSuchElementException:
             try:
                 tmp_list = browser.find_elements_by_xpath(
                     "//div[contains(@class, '_1xe_U')]/a")
+
                 if len(tmp_list) > 0:
                     logger.info("Post {}  |  Likers: found {}, catched {}".format(count, len(tmp_list), len(tmp_list)))
+
             except NoSuchElementException:
                 logger.error('There is some error searching active users')
 
@@ -385,32 +407,37 @@ def get_active_users(browser, username, posts, boundary, logger):
                 active_users.append(user.text)
 
         sleep_actual(1)
+
         # if not reached posts(parameter) value, continue
         if count +1 != posts +1 and count != 0:
             try:
                 # click next button
-                browser.find_element_by_xpath(
-                    "//a[contains(@class, 'HBoOv')]"
-                    "[text()='Next']").click()
+                next_button = browser.find_element_by_xpath(
+                                    "//a[contains(@class, 'HBoOv')]"
+                                        "[text()='Next']")
+                click_element(browser, next_button)
+
             except:
                 logger.error('Unable to go to next profile post')
 
     real_time = time.time()
     diff_in_minutes = int((real_time - start_time) / 60)
     diff_in_seconds = int((real_time - start_time) % 60)
+
     # delete duplicated users
     active_users = list(set(active_users))
-    logger.info(
-        "Gathered total of {} unique active followers from the latest {} posts in {} minutes and {} seconds".format(len(active_users),
-                                                                                                     posts,
-                                                                                                     diff_in_minutes,
-                                                                                                     diff_in_seconds))
+
+    logger.info("Gathered total of {} unique active followers from the latest {}"
+                "posts in {} minutes and {} seconds".format(len(active_users),
+                                                             posts,
+                                                              diff_in_minutes,
+                                                              diff_in_seconds))
 
     return active_users
 
 
 
-def delete_line_from_file(filepath, lineToDelete, logger):
+def delete_line_from_file(filepath, userToDelete, logger):
     """ Remove user's record from the followed pool file after unfollowing """
     if not os.path.isfile(filepath):
         #in case of there is no any followed pool file yet
@@ -420,17 +447,24 @@ def delete_line_from_file(filepath, lineToDelete, logger):
         file_path_old = filepath+".old"
         file_path_Temp = filepath+".temp"
 
-        f = open(filepath, "r")
-        lines = f.readlines()
-        f.close()
+        with open(filepath, "r") as f:
+            lines = f.readlines()
 
-        f = open(file_path_Temp, "w")
-        for line in lines:
-            if (line.find(lineToDelete) < 0):
-                f.write(line)
-            else:
-                logger.info("\tRemoved '{}' from followedPool.csv file".format(line.split(',\n')[0]))
-        f.close()
+        with open(file_path_Temp, "w") as f:
+            for line in lines:
+                entries = line.split(" ~ ")
+                sz = len(entries)
+                if sz == 1:
+                    user = entries[0][:-2]
+                elif sz == 2:
+                    user = entries[1][:-2]
+                else:
+                    user = entries[1]
+
+                if user == userToDelete:
+                    logger.info("\tRemoved '{}' from {} file".format(line.split(',\n')[0], filepath))
+                else:
+                    f.write(line)
 
         # File leftovers that should not exist, but if so remove it
         while os.path.isfile(file_path_old):
@@ -494,6 +528,10 @@ def click_element(browser, element, tryNum=0):
     try:
         # use Selenium's built in click function
         element.click()
+
+        # update server calls after a successful click by selenium
+        update_activity()
+
     except:
         # click attempt failed
         # try something funky and try again
@@ -501,18 +539,26 @@ def click_element(browser, element, tryNum=0):
         if tryNum == 0:
             # try scrolling the element into view
             browser.execute_script("document.getElementsByClassName('" +  element.get_attribute("class") + "')[0].scrollIntoView({ inline: 'center' });")
+
         elif tryNum == 1:
             # well, that didn't work, try scrolling to the top and then clicking again
             browser.execute_script("window.scrollTo(0,0);")
+
         elif tryNum == 2:
             # that didn't work either, try scrolling to the bottom and then clicking again
             browser.execute_script("window.scrollTo(0,document.body.scrollHeight);")
+
         else:
             # try `execute_script` as a last resort
             # print("attempting last ditch effort for click, `execute_script`")
             browser.execute_script("document.getElementsByClassName('" +  element.get_attribute("class") + "')[0].click()")
-            return # end condition for the recursive function
+            # update server calls after last click attempt by JS
+            update_activity()
+            # end condition for the recursive function
+            return
 
+        # update server calls after the scroll(s) in 0, 1 and 2 attempts
+        update_activity()
 
         # sleep for 1 second to allow window to adjust (may or may not be needed)
         sleep_actual(1)
@@ -577,6 +623,8 @@ def get_relationship_counts(browser, username, logger):
         except NoSuchElementException:
             try:
                 browser.execute_script("location.reload()")
+                update_activity()
+
                 followers_count = browser.execute_script(
                     "return window._sharedData.entry_data."
                     "ProfilePage[0].graphql.user.edge_followed_by.count")
@@ -610,6 +658,8 @@ def get_relationship_counts(browser, username, logger):
         except NoSuchElementException:
             try:
                 browser.execute_script("location.reload()")
+                update_activity()
+
                 following_count = browser.execute_script(
                     "return window._sharedData.entry_data."
                     "ProfilePage[0].graphql.user.edge_follow.count")
@@ -820,9 +870,19 @@ def ping_server(host, logger):
     need_sh = False if  system().lower()=="windows" else True
 
     # pinging
-    conn = call(command, shell=need_sh) == 0
+    ping_attempts = 2
+    connectivity = None
 
-    if conn == False:
+    while connectivity != True and ping_attempts > 0:
+        connectivity = call(command, shell=need_sh) == 0
+
+        if connectivity == False:
+            logger.warning("Pinging the server again!\t~total attempts left: {}"
+                                .format(ping_attempts))
+            ping_attempts -= 1
+            sleep(5)
+
+    if connectivity == False:
         logger.critical("There is no connection to the '{}' server!".format(host))
         return False
 
@@ -897,13 +957,29 @@ def check_authorization(browser, username, method, logger):
         except WebDriverException:
             try:
                 browser.execute_script("location.reload()")
+                update_activity()
+
                 activity_counts = browser.execute_script(
                                     "return window._sharedData.activity_counts")
 
             except WebDriverException:
                 activity_counts = None
 
-        if activity_counts is None:
+        # if user is not logged in, `activity_counts_new` will be `None`- JS `null`
+        try:
+            activity_counts_new = browser.execute_script(
+                "return window._sharedData.config.viewer")
+
+        except WebDriverException:
+            try:
+                browser.execute_script("location.reload()")
+                activity_counts_new = browser.execute_script(
+                    "return window._sharedData.config.viewer")
+
+            except WebDriverException:
+                activity_counts_new = None
+
+        if activity_counts is None and activity_counts_new is None:
             logger.critical("--> '{}' is not logged in!\n".format(username))
             return False
 
@@ -911,19 +987,30 @@ def check_authorization(browser, username, method, logger):
 
 
 
-def get_username(browser, logger):
+def get_username(browser, track, logger):
     """ Get the username of a user from the loaded profile page """
+    if track == "profile":
+        query = "return window._sharedData.entry_data. \
+                    ProfilePage[0].graphql.user.username"
+
+    elif track == "post":
+        query = "return window._sharedData.entry_data. \
+                    PostPage[0].graphql.shortcode_media.owner.username"
+
     try:
-        username = browser.execute_script("return window._sharedData.entry_data."
-                                                "ProfilePage[0].graphql.user.username")
+        username = browser.execute_script(query)
+
     except WebDriverException:
         try:
             browser.execute_script("location.reload()")
-            username = browser.execute_script("return window._sharedData.entry_data."
-                                                    "ProfilePage[0].graphql.user.username")
+            update_activity()
+
+            username = browser.execute_script(query)
+
         except WebDriverException:
             current_url = get_current_url(browser)
-            logger.info("Failed to get the username from '{}' page".format(current_url or "user"))
+            logger.info("Failed to get the username from '{}' page".format(current_url or
+                                                        "user" if track == "profile" else "post"))
             username = None
 
     # in future add XPATH ways of getting username
@@ -949,6 +1036,8 @@ def find_user_id(browser, track, username, logger):
     except WebDriverException:
         try:
             browser.execute_script("location.reload()")
+            update_activity()
+
             user_id = browser.execute_script(query)
 
         except WebDriverException:
@@ -996,7 +1085,7 @@ def new_tab(browser):
 
 
 
-def explicit_wait(browser, track, ec_params, logger, timeout=66):
+def explicit_wait(browser, track, ec_params, logger, timeout=35, notify=True):
     """
     Explicitly wait until expected condition validates
 
@@ -1030,14 +1119,20 @@ def explicit_wait(browser, track, ec_params, logger, timeout=66):
 
         condition = ec.title_contains(expect_in_title)
 
+    elif track == "PFL":
+        ec_name = "page fully loaded"
+        condition = (lambda browser: browser.execute_script("return document.readyState")
+                                                in ["complete" or "loaded"])
+
     # generic wait block
     try:
         wait = WebDriverWait(browser, timeout)
         result = wait.until(condition)
 
     except TimeoutException:
-        logger.info("Timed out with failure while explicitly waiting until {}!\n"
-                        .format(ec_name))
+        if notify == True:
+            logger.info("Timed out with failure while explicitly waiting until {}!\n"
+                            .format(ec_name))
         return False
 
     return result
@@ -1057,6 +1152,135 @@ def get_current_url(browser):
             current_url = None
 
     return current_url
+
+
+
+def get_username_from_id(browser, user_id, logger):
+    """ Convert user ID to username """
+    # method using graphql 'Account media' endpoint
+    logger.info("Trying to find the username from the given user ID by loading a post")
+
+    query_hash = "42323d64886122307be10013ad2dcc44"   # earlier- "472f257a40c653c64c666ce877d59d2b"
+    graphql_query_URL = "https://www.instagram.com/graphql/query/?query_hash={}".format(query_hash)
+    variables = {"id":str(user_id), "first":1}
+    post_url = u"{}&variables={}".format(graphql_query_URL, str(json.dumps(variables)))
+
+    web_address_navigator(browser, post_url)
+    pre = browser.find_element_by_tag_name("pre").text
+    user_data = json.loads(pre)["data"]["user"]
+
+    if user_data:
+        user_data = user_data["edge_owner_to_timeline_media"]
+
+        if user_data["edges"]:
+            post_code = user_data["edges"][0]["node"]["shortcode"]
+            post_page = "https://www.instagram.com/p/{}".format(post_code)
+
+            web_address_navigator(browser, post_page)
+            username = get_username(browser, "post", logger)
+            if username:
+                return username
+
+        else:
+            if user_data["count"] == 0:
+                logger.info("Profile with ID {}: no pics found".format(user_id))
+
+            else:
+                logger.info("Can't load pics of a private profile to find username (ID: {})".format(user_id))
+
+    else:
+        logger.info("No profile found, the user may have blocked you (ID: {})".format(user_id))
+        return None
+
+
+    # method using private API
+    logger.info("Trying to find the username from the given user ID by a quick API call")
+
+    req = requests.get(u"https://i.instagram.com/api/v1/users/{}/info/"
+                            .format(user_id))
+    if req:
+        data = json.loads(req.text)
+        if data["user"]:
+            username = data["user"]["username"]
+            return username
+
+
+    # method using graphql 'Follow' endpoint
+    logger.info("Trying to find the username from the given user ID "
+                   "by using the GraphQL Follow endpoint")
+
+    user_link_by_id = ("https://www.instagram.com/web/friendships/{}/follow/"
+                            .format(user_id))
+
+    web_address_navigator(browser, user_link_by_id)
+    username = get_username(browser, "profile", logger)
+
+    return username
+
+
+ 
+def is_page_available(browser, logger): 
+    """ Check if the page is available and valid """
+    # wait for the current page fully load
+    explicit_wait(browser, "PFL", [], logger, 10)
+
+    try:
+        page_title = browser.title
+
+    except WebDriverException:
+        try:
+            page_title = browser.execute_script("return document.title")
+
+        except WebDriverException:
+            try:
+                page_title = browser.execute_script(
+                    "return document.getElementsByTagName('title')[0].text")
+
+            except WebDriverException:
+                logger.info("Unable to find the title of the page :(")
+                return True
+
+    expected_keywords = ["Page Not Found", "Content Unavailable"]
+    if any(keyword in page_title for keyword in expected_keywords):
+        if "Page Not Found" in page_title:
+            logger.warning("The page isn't available!\t~the link may be broken, or the page may have been removed...")
+
+        elif "Content Unavailable" in page_title:
+            logger.warning("The page isn't available!\t~the user may have blocked you...")
+
+        return False
+
+    return True
+
+
+
+@contextmanager
+def smart_run(session):
+    
+    try:
+        session.login()
+        yield
+
+    except (Exception, KeyboardInterrupt) as exc:
+        if isinstance(exc, NoSuchElementException):
+            # the problem is with a change in IG page layout
+            log_file = "{}.html".format(time.strftime("%Y%m%d-%H%M%S"))
+            file_path = os.path.join(gettempdir(), log_file)
+            with open(file_path, "wb") as fp:
+                fp.write(session.browser.page_source.encode("utf-8"))
+            print("{0}\nIf raising an issue, "
+                  "please also upload the file located at:\n{1}\n{0}"
+                    .format('*' * 70, file_path))
+
+        # provide full stacktrace (else than external interrupt)
+        if isinstance(exc, KeyboardInterrupt):
+            clean_exit("You have exited successfully.")
+
+        else:
+            raise
+
+    finally:
+        session.end()
 
 
 

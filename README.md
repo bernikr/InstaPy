@@ -1,7 +1,7 @@
 <img src="https://i.imgur.com/sJzfZsL.jpg" width="150" align="right">
 
 # InstaPy
-[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/timgrossmann/InstaPy/blob/master/LICENSE)
+[![MIT license](https://img.shields.io/badge/license-GPLv3-blue.svg)](https://github.com/timgrossmann/InstaPy/blob/master/LICENSE)
 [![built with Selenium](https://img.shields.io/badge/built%20with-Selenium-yellow.svg)](https://github.com/SeleniumHQ/selenium)
 [![built with Python3](https://img.shields.io/badge/built%20with-Python3-red.svg)](https://www.python.org/)
 [![Travis](https://img.shields.io/travis/rust-lang/rust.svg)](https://travis-ci.org/timgrossmann/InstaPy)
@@ -32,7 +32,7 @@ Table of Contents
 
 * [Getting Started](#getting-started)
   * [Basic Installation](#basic-installation)
-  * [Basic Setup](#basic-setup)
+  * [Preferred Installation](#preferred-installation)
 * [InstaPy Available Features](#instapy-available-features)
   * [Commenting](#commenting)
   * [Following](#following)
@@ -51,6 +51,7 @@ Table of Contents
   * [Interactions based on the number of followers and/or following a user has](#interactions-based-on-the-number-of-followers-andor-following-a-user-has)
   * [Liking based on the number of existing likes a post has](#liking-based-on-the-number-of-existing-likes-a-post-has)
   * [Commenting based on the number of existing comments a post has](#commenting-based-on-the-number-of-existing-comments-a-post-has)
+  * [Commenting based on madatory words in the description or first comment](#commenting-based-on-madatory-words-in-the-description-or-first-comment)
   * [Comment by Locations](#comment-by-locations)
   * [Like by Locations](#like-by-locations)
   * [Like by Tags](#like-by-tags)
@@ -86,8 +87,12 @@ Table of Contents
   * [cron](#cron)
   * [Schedule](#schedule)
 * [Extra Information](#extra-information)  
+  * [Using one of the templates](#using-one-of-the-templates)
+  * [How not to be banned](#how-not-to-be-banned)
   * [Simulation](#simulation)
   * [Disable Image Loading](#disable-image-loading)
+  * [Using Multiple Chromedrivers](#using-multiple-chromedrivers)
+  * [Changing DB or Chromedriver locations](#changing-db-or-chromedriver-locations)
 
 ## Getting started
 
@@ -135,33 +140,36 @@ Basic setup is a good way to test the tool. At project root folder open `quickst
 
 ```python
 from instapy import InstaPy
+from instapy.util import smart_run
 
+
+
+# login credentials
 insta_username = ''
 insta_password = ''
 
-# if you want to run this script on a server,
-# simply add nogui=True to the InstaPy() constructor
-session = InstaPy(username=insta_username, password=insta_password)
-session.login()
+# get an InstaPy session!
+# set headless_browser=True to run InstaPy in the background
+session = InstaPy(username=insta_username,
+                  password=insta_password,
+                  headless_browser=False)
 
-# set up all the settings
-session.set_relationship_bounds(enabled=True,
-				 potency_ratio=-1.21,
-				  delimit_by_numbers=True,
-				   max_followers=4590,
-				    max_following=5555,
-				     min_followers=45,
-				      min_following=77)
-session.set_do_comment(True, percentage=10)
-session.set_comments(['aMEIzing!', 'So much fun!!', 'Nicey!'])
-session.set_dont_include(['friend1', 'friend2', 'friend3'])
-session.set_dont_like(['pizza', 'girl'])
 
-# do the actual liking
-session.like_by_tags(['natgeo', 'world'], amount=100)
-
-# end the bot session
-session.end()
+with smart_run(session):
+    """ Activity flow """
+    # settings
+    session.set_relationship_bounds(enabled=True,
+                                      delimit_by_numbers=True,
+                                       max_followers=4590,
+                                        min_followers=45,
+                                        min_following=77)
+    
+    session.set_dont_include(["friend1", "friend2", "friend3"])
+    session.set_dont_like(["pizza", "#store"])
+    
+    
+    # actions
+    session.like_by_tags(["natgeo"], amount=10)
 ```
 
 Execute it:
@@ -172,7 +180,7 @@ $ python quickstart.py
 
 ### Or use our GUI
 
-[1. Official Cross Platform GUI](https://github.com/ahmadudin/electron-instaPy-GUI)
+[1. Cross Platform GUI](https://github.com/ahmadudin/electron-instaPy-GUI)
 
 [2. Session scheduling with Telegram](https://github.com/Tkd-Alex/Telegram-InstaPy-Scheduling)
 
@@ -591,8 +599,10 @@ session.set_delimit_commenting(enabled=True, max=32, min=0)
 Use `enabled=True` to **activate** and `enabled=False` to **deactivate** it, _any time_  
 `max` is the maximum number of comments to compare  
 `min` is the minimum number of comments to compare
-> You can use **both** _max_ & _min_ values OR **one of them** _as you desire_, just **put** the value of `None` _to the one_ you **don't want to** check for., _e.g._,
+> You can use **both** _max_ & _min_ values OR **one of them** _as you desire_, just **leave** it out or **put** it to `None` _to the one_ you **don't want to** check for., _e.g._,
 ```python
+session.set_delimit_commenting(enabled=True, min=4)
+# or
 session.set_delimit_commenting(enabled=True, max=None, min=4)
 ```
 _at this configuration above, it **will not** check number of the existing comments against **maximum** value_
@@ -604,7 +614,16 @@ session.set_delimit_commenting(enabled=True, max=70, min=5)
 _**Now**, if a post has more comments than the maximum value of `70`, then it will not comment on that post,
 **similarly**, if that post has less comments than the minimum value of `5`, then it will not comment on that post..._
 
+### Commenting based on madatory words in the description or first comment
 
+##### This is used to check the description of the post and the first comment of the post (some users only put tags in the comments instead of the post description) for the occurence of mandatory words before commenting. If none of the mandatory words is present, the post will not be commented.
+
+This feature is helpful when you want to comment only on specific tags.
+
+```python
+session.set_delimit_commenting(enabled=True, comments_mandatory_words=['cat', 'dog'])
+```
+> This will only comment on posts that contain either cat or dog in the post description or first comment.
 
 ### Comment by Locations
 
@@ -1487,9 +1506,18 @@ while True:
 
 ## Extra Information
 
+### Using one of the templates
 
-#### How not to be banned?
-Built-in delays prevent your account from getting banned. (Just make sure you don't like 1000s of post/day)
+If you're interested in what other users setup looks like, feel free to check out the `quickstart_templates` folder which includes several working setups with different features.
+
+In order to use them, just copy the desired file and put it next to the `quickstart.py` file in the, what is called root, directory.
+
+Finally simply adjust the username and any tags or firend lists before executing it.
+That's it.
+
+### How not to be banned
+- Built-in delays prevent your account from getting banned. (Just make sure you don't like 1000s of post/day)
+- Use the Quota Supervisor feature to set some fixed limits for the bot for maximum safety.
 
 
 ### Chrome Browser
@@ -1519,10 +1547,25 @@ To do this simply pass the `disable_image_load=True` parameter in the InstaPy co
 session = InstaPy(username=insta_username,
                   password=insta_password,
                   headless_browser=False,
-		  disable_image_loading=True,
+		  disable_image_load=True,
                   multi_logs=True)
 ```
 
+### Using Multiple Chromedrivers
+If you need multiple os versions of chromedriver just rename it like:
+```bash
+chromedriver_linux
+chromedriver_osx
+chromedriver_windows
+```
+
+### Changing DB or Chromedriver locations
+If you want to change the location/path of either the DB or the chromedriver, simply head into the `instapy/settings.py` file and change the following lines. 
+Set these in instapy/settings.py if you're locating the library in the /usr/lib/pythonX.X/ directory.
+```
+Settings.database_location = '/path/to/instapy.db'
+Settings.chromedriver_location = '/path/to/chromedriver'
+```
 
 ---
 ###### Have Fun & Feel Free to report any issues
