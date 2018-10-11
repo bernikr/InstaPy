@@ -90,7 +90,7 @@ def main(argv):
         session.unfollow_users(
             amount=100,
             allFollowing=True,
-            unfollow_after=3*24*60*60,
+            unfollow_after=1.5*24*60*60,
             sleep_delay=655,
         )
 
