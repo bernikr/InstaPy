@@ -34,14 +34,14 @@ p2 <- ggplot(followerData[followerData$Date >= cutoff,], aes(x=Date, y=Followers
 #p2 <- p2 + geom_line(data=followingData[followingData$Date >= cutoff,], aes(x=Date, y=Following), color='gray')
 p2 <- p2 + ggtitle(paste("Followers over the last 30 Days\nCreated:", created_time))
 filename = paste(folder,'last_month.png', sep='')
-ggsave(filename, plot=p2)
+ggsave(filename, plot=p2, width=7, height=3)
 #plot(p2)
 
 # plot following over last 30 days
 p3 <- ggplot(followingData[followingData$Date >= cutoff,], aes(x=Date, y=Following)) + geom_line()
 p3 <- p3 + ggtitle(paste("Number of Accounts followed over the last 30 Days\nCreated:", created_time))
 filename = paste(folder,'last_month_following.png', sep='')
-ggsave(filename, plot=p3)
+ggsave(filename, plot=p3, width=7, height=3)
 #plot(p3)
 
 xvals = as.numeric(readLines(paste(folder,'regression-days', sep='')))
