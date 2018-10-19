@@ -119,3 +119,7 @@ tests/logs
 
 #config
 config.json
+
+# Pipfile
+Pipfile
+Pipfile.lock
