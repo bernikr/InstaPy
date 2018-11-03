@@ -83,3 +83,30 @@ for(x in xvals){
   ggsave(filename, plot=p3)
 }
 
+# Avarage Growth
+movingAverage<-function(data, time){
+  data$avg <- NA
+  for(i in c(1:length(data$avg))){
+    cd <- data$Date[i]
+    cf <- data$Followers[i]
+    p <- subset(data, Date<cd-time)
+    last_row <- length(p$Date)
+    pd <- p$Date[last_row]
+    pf <- p$Followers[last_row]
+    
+    if(last_row>0){
+      data$avg[i] <- ((cf-pf)/((cd-pd)/ddays(1)))
+    }
+  }
+  return(data)
+}
+
+p <- ggplot()
+p <- p + geom_line(aes(x=Date, y=avg, color='1 Day'), subset(movingAverage(followerData, days(1)),!is.na(avg)))
+p <- p + geom_line(aes(x=Date, y=avg, color='5 Days'), subset(movingAverage(followerData, days(5)),!is.na(avg)))
+#p <- p + geom_line(aes(x=Date, y=avg, color='10 Days'), subset(movingAverage(followerData, days(10)),!is.na(avg)))
+#p <- p + geom_point(aes(x=Date, y=avg, color='1 Hour'), subset(movingAverage(followerData, hours(1)),!is.na(avg)))
+p <- p + ggtitle(paste('Moving Avarages in Growth over different Timeframes\nCreated:', created_time))
+p <- p + labs(y ='Followers/Day', color = "Avarages")
+filename = paste(folder,'growth.png', sep='')
+ggsave(filename, plot=p)
