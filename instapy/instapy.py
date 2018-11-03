@@ -89,6 +89,7 @@ class InstaPy:
                  proxy_port=None,
                  disable_image_load=False,
                  bypass_suspicious_attempt=False,
+                 bypass_with_mobile=False,
                  multi_logs=True):
 
         if nogui:
@@ -104,6 +105,7 @@ class InstaPy:
         self.selenium_local_session = selenium_local_session
         self.show_logs = show_logs
         self.bypass_suspicious_attempt = bypass_suspicious_attempt
+        self.bypass_with_mobile = bypass_with_mobile
         self.disable_image_load = disable_image_load
 
         self.username = username or os.environ.get('INSTA_USER')
@@ -164,10 +166,13 @@ class InstaPy:
 
         self.use_clarifai = False
         self.clarifai_api_key = None
+        self.clarifai_models = []
+        self.clarifai_workflow = []
         self.clarifai_probability = 0.50
         self.clarifai_img_tags = []
         self.clarifai_img_tags_skip = []
         self.clarifai_full_match = False
+        self.clarifai_proxy = None
 
         self.potency_ratio = 1.3466
         self.delimit_by_numbers = True
@@ -224,6 +229,8 @@ class InstaPy:
         if self.selenium_local_session == True:
             self.set_selenium_local_session()
 
+
+
     def get_instapy_logger(self, show_logs):
         """
         Handles the creation and retrieval of loggers to avoid re-instantiation.
@@ -255,6 +262,8 @@ class InstaPy:
             Settings.loggers[self.username] = logger
             Settings.logger = logger
             return logger
+
+
 
     def set_selenium_local_session(self):
         """Starts local session for a selenium server.
@@ -359,26 +368,40 @@ class InstaPy:
 
         return self
 
-    def set_selenium_remote_session(self, selenium_url=''):
-        """Starts remote session for a selenium server.
-         Useful for docker setup."""
+      
+
+    def set_selenium_remote_session(self, selenium_url='', selenium_driver=None):
+        """
+        Starts remote session for a selenium server.
+        Creates a new selenium driver instance for remote session or uses provided
+        one. Useful for docker setup.
+
+        :param selenium_url: string
+        :param selenium_driver: selenium WebDriver
+        :return: self
+        """
         if self.aborting:
             return self
 
-        if self.use_firefox:
-            self.browser = webdriver.Remote(
-                command_executor=selenium_url,
-                desired_capabilities=DesiredCapabilities.FIREFOX)
+        if selenium_driver:
+            self.browser = selenium_driver
         else:
-            self.browser = webdriver.Remote(
-                command_executor=selenium_url,
-                desired_capabilities=DesiredCapabilities.CHROME)
+            if self.use_firefox:
+                self.browser = webdriver.Remote(
+                    command_executor=selenium_url,
+                    desired_capabilities=DesiredCapabilities.FIREFOX)
+            else:
+                self.browser = webdriver.Remote(
+                    command_executor=selenium_url,
+                    desired_capabilities=DesiredCapabilities.CHROME)
 
         message = "Session started!"
         highlight_print(self.username, message, "initialization", "info", self.logger)
         print('')
 
         return self
+
+
 
     def login(self):
         """Used to login the user either with the username and password"""
@@ -388,7 +411,8 @@ class InstaPy:
                           self.logger,
                           self.logfolder,
                           self.switch_language,
-                          self.bypass_suspicious_attempt):
+                          self.bypass_suspicious_attempt,
+                          self.bypass_with_mobile):
             message = "Wrong login data!"
             highlight_print(self.username, message, "login", "critical", self.logger)
 
@@ -403,10 +427,34 @@ class InstaPy:
 
         return self
 
+
+
     def set_sleep_reduce(self, percentage):
         set_sleep_percentage(percentage)
 
         return self
+
+
+
+    def set_action_delays(self, enabled=False,
+                                 like=None,
+                                 comment=None,
+                                 follow=None,
+                                 unfollow=None,
+                                  randomize=False,
+                                  random_range=(None, None),
+                                   safety_match=True):
+        """ Set custom sleep delay after actions """
+        Settings.action_delays.update({"enabled":enabled,
+                                        "like": like,
+                                        "comment": comment,
+                                        "follow": follow,
+                                        "unfollow": unfollow,
+                                         "randomize": randomize,
+                                         "random_range": random_range,
+                                          "safety_match": safety_match})
+
+
 
     def set_do_comment(self, enabled=False, percentage=0):
         """Defines if images should be commented or not
@@ -418,6 +466,8 @@ class InstaPy:
         self.comment_percentage = percentage
 
         return self
+
+
 
     def set_comments(self, comments=None, media=None):
         """Changes the possible comments"""
@@ -438,6 +488,8 @@ class InstaPy:
 
         return self
 
+
+
     def set_do_follow(self, enabled=False, percentage=0, times=1):
         """Defines if the user of the liked image should be followed"""
         if self.aborting:
@@ -449,6 +501,8 @@ class InstaPy:
 
         return self
 
+
+
     def set_do_like(self, enabled=False, percentage=0):
         if self.aborting:
             return self
@@ -457,6 +511,8 @@ class InstaPy:
         self.like_percentage = percentage
 
         return self
+
+
 
     def set_dont_like(self, tags=None):
         """Changes the possible restriction tags, if one of this
@@ -473,6 +529,8 @@ class InstaPy:
 
         return self
 
+
+
     def set_mandatory_words(self, tags=None):
         """Changes the possible restriction tags, if all of this
          hashtags is in the description, the image will be liked"""
@@ -487,6 +545,8 @@ class InstaPy:
         self.mandatory_words = tags or []
 
         return self
+
+
 
     def set_user_interact(self,
                           amount=10,
@@ -504,6 +564,8 @@ class InstaPy:
 
         return self
 
+
+
     def set_ignore_users(self, users=None):
         """Changes the possible restriction to users, if a user who posts
         is one of these, the image won't be liked"""
@@ -513,6 +575,8 @@ class InstaPy:
         self.ignore_users = users or []
 
         return self
+
+
 
     def set_ignore_if_contains(self, words=None):
         """Ignores the don't likes if the description contains
@@ -524,6 +588,8 @@ class InstaPy:
 
         return self
 
+
+
     def set_dont_include(self, friends=None):
         """Defines which accounts should not be unfollowed"""
         if self.aborting:
@@ -534,11 +600,20 @@ class InstaPy:
 
         return self
 
+
+
     def set_switch_language(self, option=True):
         self.switch_language = option
         return self
 
-    def set_use_clarifai(self, enabled=False, api_key=None, probability=0.50, full_match=False):
+    def set_use_clarifai(self,
+                         enabled=False,
+                         api_key=None,
+                         models=None,
+                         workflow=None,
+                         probability=0.50,
+                         full_match=False,
+                         proxy=None):
         """
         Defines if the clarifai img api should be used
         Which 'project' will be used (only 5000 calls per month)
@@ -559,10 +634,17 @@ class InstaPy:
         elif api_key is not None:
             self.clarifai_api_key = api_key
 
+        self.clarifai_models = models or ['general']
+        self.clarifai_workflow = workflow or []
         self.clarifai_probability = probability
         self.clarifai_full_match = full_match
 
+        if proxy is not None:
+            self.clarifai_proxy = 'https://' + proxy
+
         return self
+
+
 
     def set_smart_hashtags(self,
                            tags=None,
@@ -606,6 +688,8 @@ class InstaPy:
         self.smart_hashtags = list(set(self.smart_hashtags))
         return self
 
+
+
     def clarifai_check_img_for(self, tags=None, tags_skip=None, comment=False, comments=None):
         """Defines the tags the images should be checked for"""
         if self.aborting:
@@ -622,11 +706,16 @@ class InstaPy:
     def query_clarifai(self):
         """Method for querying Clarifai using parameters set in clarifai_check_img_for"""
         return check_image(self.browser, self.clarifai_api_key, self.clarifai_img_tags,
-                           self.clarifai_img_tags_skip, self.logger, self.clarifai_probability,
-                           self.clarifai_full_match)
+                           self.clarifai_img_tags_skip, self.logger, self.clarifai_models,
+                           self.clarifai_workflow, self.clarifai_probability,
+                           self.clarifai_full_match, proxy=self.clarifai_proxy)
+
 
     def follow_commenters(self, usernames, amount=10, daysold=365, max_pic=50, sleep_delay=600, interact=False):
         """ Follows users' commenters """
+
+        if self.aborting:
+            return self
 
         message = "Starting to follow commenters.."
         highlight_print(self.username, message, "feature", "info", self.logger)
@@ -727,6 +816,8 @@ class InstaPy:
     def follow_likers(self, usernames, photos_grab_amount=3, follow_likers_per_photo=3, randomize=True, sleep_delay=600,
                       interact=False):
         """ Follows users' likers """
+        if self.aborting:
+            return self
 
         message = "Starting to follow likers.."
         highlight_print(self.username, message, "feature", "info", self.logger)
@@ -872,7 +963,7 @@ class InstaPy:
                 # Verify if the user should be followed
                 validation, details = self.validate_user_call(acc_to_follow)
                 if validation != True or acc_to_follow == self.username:
-                    self.logger.info("--> Not a valid user: {}\n".format(details))
+                    self.logger.info("--> Not a valid user: {}".format(details))
                     not_valid_users += 1
                     continue
 
@@ -1179,7 +1270,7 @@ class InstaPy:
 
                             if self.use_clarifai and (following or commenting):
                                 try:
-                                    checked_img, temp_comments = (self.query_clarifai())
+                                    checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                                 except Exception as err:
                                     self.logger.error(
@@ -1274,6 +1365,8 @@ class InstaPy:
 
         return self
 
+
+
     def comment_by_locations(self,
                              locations=None,
                              amount=50,
@@ -1357,7 +1450,7 @@ class InstaPy:
 
                         if self.use_clarifai:
                             try:
-                                checked_img, temp_comments = (self.query_clarifai())
+                                checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                             except Exception as err:
                                 self.logger.error(
@@ -1549,7 +1642,7 @@ class InstaPy:
 
                             if self.use_clarifai and (following or commenting):
                                 try:
-                                    checked_img, temp_comments = (self.query_clarifai())
+                                    checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                                 except Exception as err:
                                     self.logger.error(
@@ -1654,6 +1747,8 @@ class InstaPy:
 
         return self
 
+
+
     def like_by_users(self, usernames, amount=10, randomize=False, media=None):
         """Likes some amounts of images for each usernames"""
         if self.aborting:
@@ -1686,7 +1781,7 @@ class InstaPy:
 
             validation, details = self.validate_user_call(username)
             if not validation:
-                self.logger.info("--> not a valid user: {}".format(details))
+                self.logger.info("--> Not a valid user: {}".format(details))
                 not_valid_users += 1
                 continue
 
@@ -1780,7 +1875,7 @@ class InstaPy:
 
                             if self.use_clarifai and (following or commenting):
                                 try:
-                                    checked_img, temp_comments = (self.query_clarifai())
+                                    checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                                 except Exception as err:
                                     self.logger.error(
@@ -1790,13 +1885,14 @@ class InstaPy:
                                     user_name not in self.dont_include and
                                     checked_img and
                                     commenting):
-
+                                    
                                 if self.delimit_commenting:
                                     (self.commenting_approved,
                                      disapproval_reason) = verify_commenting(
                                         self.browser,
                                         self.max_comments,
                                         self.min_comments,
+                                        self.comments_mandatory_words,
                                         self.logger)
                                 if self.commenting_approved:
                                     # smart commenting
@@ -2003,7 +2099,7 @@ class InstaPy:
 
                                 if self.use_clarifai and commenting:
                                     try:
-                                        checked_img, temp_comments = (self.query_clarifai())
+                                        checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                                     except Exception as err:
                                         self.logger.error(
@@ -2246,6 +2342,8 @@ class InstaPy:
                                                self.user_interact_amount,
                                                self.user_interact_random,
                                                self.user_interact_media)
+                    if self.aborting:
+                        return self
                     sleep(1)
 
         # final words
@@ -2390,6 +2488,8 @@ class InstaPy:
                                                self.user_interact_amount,
                                                self.user_interact_random,
                                                self.user_interact_media)
+                    if self.aborting:
+                        return self
                     sleep(1)
 
         # final words
@@ -2784,6 +2884,7 @@ class InstaPy:
                 self.logger.warning(
                     u'Warning: {} , stopping unfollow_users'.format(exc))
                 return self
+
             else:
                 self.logger.error('Sorry, an error occurred: {}'.format(exc))
                 self.aborting = True
@@ -2793,6 +2894,10 @@ class InstaPy:
 
     def like_by_feed(self, **kwargs):
         """Like the users feed"""
+
+        if self.aborting:
+            return self
+
         for i in self.like_by_feed_generator(**kwargs):
             pass
 
@@ -2924,7 +3029,7 @@ class InstaPy:
                                     if (self.use_clarifai and
                                             (following or commenting)):
                                         try:
-                                            checked_img, temp_comments = (self.query_clarifai())
+                                            checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
 
                                         except Exception as err:
                                             self.logger.error(
@@ -3050,9 +3155,14 @@ class InstaPy:
 
         return
 
+
+
     def set_dont_unfollow_active_users(self, enabled=False, posts=4, boundary=500):
         """Prevents unfollow followers who have liked one of
         your latest X posts"""
+
+        if self.aborting:
+            return
 
         # do nothing
         if not enabled:
@@ -3067,6 +3177,8 @@ class InstaPy:
 
         # include active user to not unfollow list
         self.dont_include.update(active_users)
+
+
 
     def set_blacklist(self, enabled, campaign):
         """Enable/disable blacklist. If enabled, adds users to a blacklist after
@@ -3086,6 +3198,8 @@ class InstaPy:
                         self.dont_include.add(row['username'])
         except:
             self.logger.info('Campaign {} first run'.format(campaign))
+
+
 
     def grab_followers(self, username=None, amount=None, live_match=False, store_locally=True):
         """ Gets and returns `followers` information of given user in desired amount, also, saves locally """
@@ -3114,6 +3228,8 @@ class InstaPy:
                                           self.logger,
                                           self.logfolder)
         return grabbed_followers
+
+
 
     def grab_following(self, username=None, amount=None, live_match=False, store_locally=True):
         """ Gets and returns `following` information of given user in desired amount, also, saves locally """
@@ -3165,6 +3281,8 @@ class InstaPy:
 
         return all_unfollowers, active_unfollowers
 
+
+
     def pick_nonfollowers(self, username=None, live_match=False, store_locally=True):
         """ Returns Nonfollowers data of a given user """
 
@@ -3181,6 +3299,8 @@ class InstaPy:
                                         self.logfolder)
 
         return nonfollowers
+
+
 
     def pick_fans(self, username=None, live_match=False, store_locally=True):
         """ Returns Fans data- all of the usernames who do follow
@@ -3200,6 +3320,8 @@ class InstaPy:
 
         return fans
 
+
+
     def pick_mutual_following(self, username=None, live_match=False, store_locally=True):
         """ Returns Mutual Following data- all of the usernames who do follow
         the user WHOM user itself also do follow back"""
@@ -3217,6 +3339,8 @@ class InstaPy:
                                                 self.logfolder)
 
         return mutual_following
+
+
 
     def end(self):
         """Closes the current session"""
@@ -3254,6 +3378,8 @@ class InstaPy:
             message = "Session ended!"
             highlight_print(self.username, message, "end", "info", self.logger)
             print("\n\n")
+
+
 
     def follow_by_tags(self,
                        tags=None,
@@ -3448,7 +3574,7 @@ class InstaPy:
 
                         if self.use_clarifai and (following or commenting):
                             try:
-                                checked_img, temp_comments = (self.query_clarifai())
+                                checked_img, temp_comments, clarifai_tags = (self.query_clarifai())
                             except Exception as err:
                                 self.logger.error(
                                     'Image check error: {}'.format(err))
