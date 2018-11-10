@@ -18,7 +18,6 @@ from .util import web_address_navigator
 from .util import get_relationship_counts
 from .util import emergency_exit
 from .util import load_user_id
-from .util import get_username
 from .util import find_user_id
 from .util import explicit_wait
 from .util import get_username_from_id
@@ -37,7 +36,6 @@ from .quota_supervisor import quota_supervisor
 
 from selenium.common.exceptions import WebDriverException
 from selenium.common.exceptions import NoSuchElementException
-from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import ElementNotVisibleException
 
 
@@ -116,7 +114,7 @@ def get_following_status(browser, track, username, person, person_id, logger, lo
                         )
     failure_msg = "--> Unable to detect the following status of '{}'!"
     user_inaccessible_msg = ("Couldn't access the profile page of '{}'!"
-                             "\t~might have changed the username".format(username))
+                             "\t~might have changed the username".format(person))
 
     # check if the page is available
     valid_page = is_page_available(browser, logger)
@@ -1106,7 +1104,7 @@ def get_user_id(browser, track, username, logger):
     """ Get user's ID either from a profile page or post page """
     user_id = "unknown"
 
-    if track != "dialog":   # currently do not get the user ID for follows from 'dialog' 
+    if track != "dialog":   # currently do not get the user ID for follows from 'dialog'
         user_id = find_user_id(browser, track, username, logger)
 
     return user_id
@@ -1194,6 +1192,3 @@ def verify_action(browser, action, track, username, person, person_id, logger, l
                 return False, "unexpected"
 
     return True, "success"
-
-
-
