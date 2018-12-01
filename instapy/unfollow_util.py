@@ -25,12 +25,12 @@ from .util import is_page_available
 from .util import reload_webpage
 from .util import click_visibly
 from .util import get_action_delay
+from .util import truncate_float
 from .print_log_writer import log_followed_pool
 from .print_log_writer import log_uncertain_unfollowed_pool
 from .print_log_writer import log_record_all_unfollowed
 from .relationship_tools import get_followers
 from .relationship_tools import get_nonfollowers
-from .relationship_tools import get_following
 from .database_engine import get_database
 from .quota_supervisor import quota_supervisor
 
@@ -225,18 +225,17 @@ def unfollow(browser,
 
     if (customList == True or
             InstapyFollowed == True or
-            nonFollowers == True or
-            allFollowing == True):
+                nonFollowers == True):
 
-        if customList:
+        if customList == True:
             logger.info("Unfollowing from the list of pre-defined usernames\n")
             unfollow_list = customList_data
 
-        elif InstapyFollowed:
+        elif InstapyFollowed == True:
             logger.info("Unfollowing the users followed by InstaPy\n")
             unfollow_list = list(automatedFollowedPool["eligible"].keys())
 
-        elif nonFollowers:
+        elif nonFollowers == True:
             logger.info("Unfollowing the users who do not follow back\n")
             """  Unfollow only the users who do not follow you back """
             unfollow_list = get_nonfollowers(browser,
@@ -246,18 +245,6 @@ def unfollow(browser,
                                                  True,
                                                   logger,
                                                    logfolder)
-
-        elif allFollowing:
-            logger.info("Unfollowing all users you are following\n")
-            """  Unfollow only the users who do not follow you back """
-            unfollow_list = get_following(browser,
-                                             username,
-                                             "full",
-                                             relationship_data,
-                                             False,
-                                             True,
-                                             logger,
-                                             logfolder)
 
         # pick only the users in the right track- ["all" or "nonfollowers"] for `customList` and
         #  `InstapyFollowed` unfollow methods
@@ -281,7 +268,7 @@ def unfollow(browser,
 
         # re-generate unfollow list according to the `unfollow_after` parameter for `customList` and
         #  `nonFollowers` unfollow methods
-        if customList or nonFollowers or allFollowing:
+        if customList == True or nonFollowers == True:
             not_found = []
             non_eligible = []
             for person in unfollow_list:
@@ -338,7 +325,7 @@ def unfollow(browser,
                     delay_random = random.randint(ceil(sleep_delay*0.85), ceil(sleep_delay*1.14))
                     logger.info("Unfollowed {} new users  ~sleeping about {}\n".format(sleep_counter,
                                     '{} seconds'.format(delay_random) if delay_random < 60 else
-                                    '{} minutes'.format(float("{0:.2f}".format(delay_random/60)))))
+                                    '{} minutes'.format(truncate_float(delay_random/60, 2))))
                     sleep(delay_random)
                     sleep_counter = 0
                     sleep_after = random.randint(8, 12)
@@ -390,6 +377,140 @@ def unfollow(browser,
                     continue
         except BaseException as e:
             logger.error("Unfollow loop error:  {}\n".format(str(e)))
+
+
+    elif allFollowing == True:
+        logger.info("Unfollowing the users you are following")
+        # unfollow from profile
+        try:
+            following_link = browser.find_elements_by_xpath(
+                '//section//ul//li[3]')
+
+            click_element(browser, following_link[0])
+            # update server calls
+            update_activity()
+        except BaseException as e:
+            logger.error("following_link error {}".format(str(e)))
+            return 0
+
+        # scroll down the page to get sufficient amount of usernames
+        get_users_through_dialog(browser, None, username, amount,
+                                     allfollowing, False, None, None,
+                                     None, {"enabled": False, "percentage": 0},
+                                     "Unfollow", jumps, logger, logfolder)
+
+        # find dialog box
+        dialog = browser.find_element_by_xpath(
+            "//div[text()='Following']/../../../following-sibling::div")
+
+        sleep(3)
+
+        # get persons, unfollow buttons, and length of followed pool
+        person_list_a = dialog.find_elements_by_tag_name("a")
+        person_list = []
+
+        for person in person_list_a:
+
+            if person and hasattr(person, 'text') and person.text:
+                person_list.append(person.text)
+
+        follow_buttons = dialog.find_elements_by_tag_name('button')
+
+        # re-generate person list to unfollow according to the `unfollow_after` parameter
+        user_info = list(zip(follow_buttons, person_list))
+        non_eligible = []
+        not_found = []
+
+        for button, person in user_info:
+            if person not in automatedFollowedPool["all"].keys():
+                not_found.append(person)
+            elif (person in automatedFollowedPool["all"].keys() and
+                    person not in automatedFollowedPool["eligible"].keys()):
+                non_eligible.append(person)
+
+        user_info = [pair for pair in user_info if pair[1] not in non_eligible]
+        logger.info("Total {} users available to unfollow"
+            "  ~not found in 'followedPool.csv': {}  |  didn't pass `unfollow_after`: {}".format(
+                len(user_info), len(not_found), len(non_eligible)))
+
+        if len(user_info) < 1:
+            logger.info("There are no any users to unfollow")
+            return 0
+        elif len(user_info) < amount:
+            logger.info("Could not grab requested amount of usernames to unfollow:  "
+                "{}/{}  ~using available amount".format(len(user_info), amount))
+            amount = len(user_info)
+
+        if style == "LIFO":
+            user_info = list(reversed(user_info))
+        elif style == "RANDOM":
+            random.shuffle(user_info)
+
+        # unfollow loop
+        try:
+            hasSlept = False
+
+            for button, person in user_info:
+                if unfollowNum >= amount:
+                    logger.info(
+                        "--> Total unfollowNum reached it's amount given: {}"
+                        .format(unfollowNum))
+                    break
+
+                if jumps["consequent"]["unfollows"] >= jumps["limit"]["unfollows"]:
+                    logger.warning("--> Unfollow quotient reached its peak!\t~leaving Unfollow-Users activity\n")
+                    break
+
+                if (unfollowNum != 0 and
+                        hasSlept is False and
+                            unfollowNum % 10 == 0 and
+                                sleep_delay not in [0, None]):
+                    logger.info("sleeping for about {} min\n"
+                                .format(int(sleep_delay/60)))
+                    sleep(sleep_delay)
+                    hasSlept = True
+                    pass
+
+                if person not in dont_include:
+                    logger.info(
+                        "Ongoing Unfollow [{}/{}]: now unfollowing '{}'..."
+                        .format(unfollowNum+1, amount, person.encode('utf-8')))
+
+                    person_id = (automatedFollowedPool["all"][person]["id"] if
+                                person in automatedFollowedPool["all"].keys() else False)
+
+                    unfollow_state, msg = unfollow_user(browser,
+                                                "dialog",
+                                                 username,
+                                                 person,
+                                                  person_id,
+                                                   button,
+                                                    relationship_data,
+                                                     logger,
+                                                     logfolder)
+                    if unfollow_state == True:
+                        unfollowNum += 1
+                        # reset jump counter after a successful unfollow
+                        jumps["consequent"]["unfollows"] = 0
+
+                    elif msg == "jumped":
+                        # will break the loop after certain consecutive jumps
+                        jumps["consequent"]["unfollows"] += 1
+
+                    elif msg in ["temporary block", "not connected", "not logged in"]:
+                        # break the loop in extreme conditions to prevent misbehaviours
+                        logger.warning("There is a serious issue: '{}'!\t~leaving Unfollow-Users activity".format(msg))
+                        break
+
+                    # To only sleep once until there is the next unfollow
+                    if hasSlept:
+                        hasSlept = False
+
+                else:
+                    logger.info("Not unfollowing '{}'!  ~user is in the whitelist\n".format(person))
+
+        except Exception as exc:
+            logger.error("Unfollow loop error:\n\n{}\n\n".format(str(exc).encode('utf-8')))
 
     else:
         logger.info("Please select a proper unfollow method!  ~leaving unfollow activity\n")
@@ -489,11 +610,7 @@ def follow_user(browser, track, login, user_name, button, blacklist, logger, log
 
     return True, "success"
 
-def scroll_to_bottom_of_followers_list(browser, element):
-    browser.execute_script(
-            "arguments[0].children[1].scrollIntoView()", element)
-    sleep(1)
-    return
+
 
 def scroll_to_bottom_of_followers_list(browser, element):
     browser.execute_script(
@@ -528,9 +645,8 @@ def get_users_through_dialog(browser,
         amount = int(users_count*0.85)
     try_again = 0
     sc_rolled = 0
-
     # find dialog box
-    dialog_address = "//div[text()='Followers' or text()='Following']/../../following-sibling::div"
+    dialog_address = "//div[3]/div/div/div[2]"
     dialog = browser.find_element_by_xpath(dialog_address)
 
     # scroll to end of follower list to initiate first load which hides the suggestions
@@ -544,9 +660,6 @@ def get_users_through_dialog(browser,
     simulated_list = []
     simulator_counter = 0
 
-    # scroll to end of follower list to initiate first load which hides the suggestions
-    scroll_to_bottom_of_followers_list(browser, dialog)
-    
     # scroll down if the generated list of user to follow is not enough to
     # follow amount set
     while (total_list < amount) and not abort:
@@ -1166,6 +1279,7 @@ def verify_action(browser, action, track, username, person, person_id, logger, l
 
             else:
                 action_state = None
+
 
             # handle it!
             if action_state == True:

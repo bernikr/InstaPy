@@ -79,7 +79,7 @@ def extract_post_info(browser):
                     user_commented = comm.find_element_by_tag_name('a').get_attribute("href").split('/')
                     user_commented_list.append(user_commented[3])
 
-            except:
+            except Exception:
                 print ("cant get comments")
 
         print (len(user_commented_list), " comments.")
@@ -99,7 +99,7 @@ def extract_information(browser, username, daysold, max_pic):
         num_of_posts = (min (num_of_posts,max_pic))
         #we don't need to scroll more than is max number of posts we want to extract
 
-    except:
+    except Exception:
         print ("\nError: Couldn't get user profile. Moving on..")
         return []
 
@@ -154,7 +154,7 @@ def extract_information(browser, username, daysold, max_pic):
                                     "//section/main/article/div[1]/div/div[10]/div[3]/a/div")
                         click_element(browser, one_pic_elem)
 
-                    except:
+                    except Exception:
                         print ("Error: cant click on the photo..")
                         pass
 
@@ -166,7 +166,7 @@ def extract_information(browser, username, daysold, max_pic):
                         click_element(browser, like_element[0])
                         print ("clicking like..")
 
-                    except:
+                    except Exception:
                         pass
                     sleep(2)
 
@@ -269,13 +269,17 @@ def users_liked (browser, photo_url, amount=100):
 def likers_from_photo(browser, amount=20):
 
     user_liked_list = []
+    liked_counter_button = "//div/article/div[2]/section[2]/div/div/a"
+
     try:
-        liked_this = browser.find_elements_by_xpath("//div/article/div[2]/section[2]/div/a")
+        liked_this = browser.find_elements_by_xpath(liked_counter_button)
         likers = []
+
         for liker in liked_this:
             if "like this" not in liker.text:
                 likers.append(liker.text)
-        if check_exists_by_xpath(browser, "//div/article/div[2]/section[2]/div/a"):
+
+        if check_exists_by_xpath(browser, liked_counter_button):
             if "likes" not in liked_this[0].text:
                 print ("Few likes, not guaranteed you don't follow these likers already.\nGot photo likers: ", likers," \n")
                 return likers
@@ -338,7 +342,7 @@ def likers_from_photo(browser, amount=20):
             click_element(browser, close)
             print ("Like window closed")
 
-        except:
+        except Exception:
             pass
 
         print("Got {} likers shuffled randomly whom you can follow:\n{}\n".format(len(person_list), person_list))
