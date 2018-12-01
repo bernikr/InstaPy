@@ -70,6 +70,16 @@ def main(argv):
             randomize=False,
         )
 
+        session.set_quota_supervisor(enabled=True,
+                                     sleep_after=['follows', 'server_calls_h'],
+                                     sleepyhead=True, stochastic_flow=True,
+                                     peak_likes=(50, 600),
+                                     peak_comments=(20, 250),
+                                     peak_follows=(40, 400),
+                                     peak_unfollows=(30, 500),
+                                     peak_server_calls=(None, 4700)
+                                     )
+
         ##########
         # do stuff
 
