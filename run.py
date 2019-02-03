@@ -33,6 +33,9 @@ def main(argv):
     with open('config.json') as f:
         config = json.load(f)
 
+    with open('friends.txt') as f:
+        friends = [s.strip() for s in f.readlines()]
+
     session = InstaPy(
         username=config['username'],
         password=config['password'],
@@ -58,17 +61,7 @@ def main(argv):
             min_following=10,
         )
 
-        session.set_dont_include(config['dont_unfollow'])
-
-        session.set_do_like(
-            enabled=True,
-            percentage=30,
-        )
-
-        session.set_user_interact(
-            amount=5,
-            randomize=False,
-        )
+        session.set_dont_include(friends)
 
         session.set_quota_supervisor(enabled=True,
                                      sleep_after=['follows', 'server_calls_h'],
@@ -90,19 +83,13 @@ def main(argv):
             print('warning: graph not updated')
             print(e)
 
-        session.follow_user_followers(
-            config['rolemodels'],
-            amount=20,
-            randomize=True,
-            interact=True,
-        )
 
-        session.unfollow_users(
-            amount=100,
-            allFollowing=True,
-            unfollow_after=1.5*24*60*60,
-            sleep_delay=655,
-        )
+        #session.unfollow_users(
+        #    amount=100,
+        #    allFollowing=True,
+        #    unfollow_after=1.5*24*60*60,
+        #    sleep_delay=655,
+        #)
 
     except Exception as exc:
         # if changes to IG layout, upload the file to help us locate the change

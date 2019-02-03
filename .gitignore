@@ -123,3 +123,4 @@ config.json
 # Pipfile
 Pipfile
 Pipfile.lock
+friends.txt
