@@ -121,6 +121,7 @@ tests/logs
 #config
 config.json
 friends.txt
+last_following.txt
 
 # Pipfile
 Pipfile

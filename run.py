@@ -36,17 +36,27 @@ def main(argv):
     with open('friends.txt') as f:
         friends = [s.strip() for s in f.readlines()]
 
+    with open('last_following.txt') as f:
+        last_following = [s.strip() for s in f.readlines()]
+
     session = InstaPy(
         username=config['username'],
         password=config['password'],
         headless_browser=True,
         show_logs=not silent,
-        multi_logs=True,
         disable_image_load=True,
+        multi_logs=False,
     )
 
     try:
         session.login()
+
+        current_following = session.grab_following(username=session.username, amount="full")
+        new_friends = [x for x in current_following if (x not in last_following and x not in friends)]
+        if len(new_friends)>0:
+            friends.extend(new_friends)
+            with open('friends.txt', 'w') as f:
+                f.writelines(map(lambda s: s + '\n', friends))
 
         ##########
         # settings
@@ -60,6 +70,7 @@ def main(argv):
             min_followers=5,
             min_following=10,
         )
+
 
         session.set_dont_include(friends)
 
@@ -78,7 +89,7 @@ def main(argv):
 
         # update the follower graph
         try:
-            subprocess.call(["./plot_followers.R", session.username], stderr=subprocess.DEVNULL)
+            subprocess.call(["./plot_followers.R"], stderr=subprocess.DEVNULL)
         except Exception as e:
             print('warning: graph not updated')
             print(e)
@@ -90,6 +101,13 @@ def main(argv):
         #    unfollow_after=1.5*24*60*60,
         #    sleep_delay=655,
         #)
+
+
+        #########
+        # save people currently followed
+        following = session.grab_following(username=session.username, amount="full")
+        with open('last_following.txt', 'w') as f:
+            f.writelines(map(lambda s: s + '\n', following))
 
     except Exception as exc:
         # if changes to IG layout, upload the file to help us locate the change
