@@ -61,16 +61,17 @@ def main(argv):
         ##########
         # settings
 
-        session.set_relationship_bounds(
-            enabled=True,
-            potency_ratio=-0.9,
-            delimit_by_numbers=True,
-            max_followers=2000,
-            max_following=1000,
-            min_followers=5,
-            min_following=10,
-        )
+        #session.set_relationship_bounds(
+        #    enabled=True,
+        #    potency_ratio=-0.9,
+        #    delimit_by_numbers=True,
+        #    max_followers=2000,
+        #    max_following=1000,
+        #    min_followers=5,
+        #    min_following=10,
+        #)
 
+        session.set_delimit_liking(enabled=True, max=242, min=24)
 
         session.set_dont_include(friends)
 
@@ -84,6 +85,8 @@ def main(argv):
                                      peak_server_calls=(None, 4700)
                                      )
 
+        session.set_dont_like(config['ignore_tags'])
+
         ##########
         # do stuff
 
@@ -93,6 +96,9 @@ def main(argv):
         except Exception as e:
             print('warning: graph not updated')
             print(e)
+
+        if 'like_by_tag' in config:
+            session.like_by_tags(config['like_by_tag']['tags'], amount=config['like_by_tag']['amount'])
 
 
         #session.unfollow_users(
